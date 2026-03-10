@@ -16,7 +16,8 @@ interface HNResponse {
 
 export async function fetchShowHN(daysBack: number = 7): Promise<HNPost[]> {
   const unixTime = Math.floor(Date.now() / 1000) - daysBack * 86400;
-  const url = `https://hn.algolia.com/api/v1/search?tags=show_hn&hitsPerPage=50&numericFilters=created_at_i>${unixTime}`;
+  // Require minimum 5 points to filter out dead/low-quality posts
+  const url = `https://hn.algolia.com/api/v1/search?tags=show_hn&hitsPerPage=50&numericFilters=created_at_i>${unixTime},points>4`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HN API error: ${res.status}`);

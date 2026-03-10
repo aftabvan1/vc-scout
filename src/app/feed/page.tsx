@@ -21,6 +21,7 @@ interface FeedItem {
 interface FeedResponse {
   items: FeedItem[];
   sources: Record<string, number>;
+  total: number;
   fetchedAt: string;
 }
 
@@ -47,16 +48,16 @@ export default function FeedPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("score");
+  const [quality, setQuality] = useState<"all" | "high">("high");
   const [analyzing, setAnalyzing] = useState(false);
   const [aiScores, setAiScores] = useState<Record<string, { score: number; verdict: string; tags: string[] }>>({});
 
   const fetchFeed = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/feed?sort=${sort}`);
+      const res = await fetch(`/api/feed?sort=${sort}&quality=${quality}`);
       const data = await res.json();
       setFeed(data);
-      // Load any existing AI scores from feed data
       const scores: Record<string, { score: number; verdict: string; tags: string[] }> = {};
       for (const item of data.items || []) {
         if (item.aiScore !== undefined) {
@@ -75,7 +76,7 @@ export default function FeedPage() {
     } finally {
       setLoading(false);
     }
-  }, [sort]);
+  }, [sort, quality]);
 
   useEffect(() => { fetchFeed(); }, [fetchFeed]);
 
@@ -99,7 +100,6 @@ export default function FeedPage() {
     if (!feed || analyzing) return;
     setAnalyzing(true);
     try {
-      // Send top 20 items without AI scores for analysis
       const unscored = feed.items
         .filter((item) => !aiScores[`${item.source}:${item.name}`])
         .slice(0, 20);
@@ -134,7 +134,6 @@ export default function FeedPage() {
     return true;
   }) || [];
 
-  // Apply AI sort client-side if sort=ai and we have scores
   const sortedItems = sort === "ai"
     ? [...filteredItems].sort((a, b) => {
       const aScore = aiScores[`${a.source}:${a.name}`]?.score ?? a.aiScore ?? -1;
@@ -158,8 +157,6 @@ export default function FeedPage() {
     { key: "ai", label: "AI Score" },
   ];
 
-  const totalSources = feed ? Object.values(feed.sources).reduce((a, b) => a + b, 0) : 0;
-
   return (
     <div className="p-6 max-w-[920px]">
       {/* Header */}
@@ -169,7 +166,7 @@ export default function FeedPage() {
             Feed
           </h1>
           <p className="text-[11px] mt-0.5 tabular-nums" style={{ color: "var(--text-muted)", fontFamily: "var(--font-geist-mono)" }}>
-            {feed ? `${totalSources} startups from ${Object.keys(feed.sources).filter((k) => feed.sources[k] > 0).length} sources` : "Loading..."}
+            {feed ? `${feed.total} startups from ${Object.keys(feed.sources).filter((k) => feed.sources[k] > 0).length} sources` : "Loading..."}
             {feed && ` — synced ${new Date(feed.fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
           </p>
         </div>
@@ -210,7 +207,8 @@ export default function FeedPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 mb-4 ani" style={{ animationDelay: "0.05s" }}>
+      <div className="flex items-center gap-2 mb-4 flex-wrap ani" style={{ animationDelay: "0.05s" }}>
+        {/* Source filters */}
         <div className="flex items-center gap-[2px] p-[3px] rounded-md" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           {filters.map((f) => (
             <button
@@ -249,6 +247,30 @@ export default function FeedPage() {
           ))}
         </div>
 
+        {/* Quality toggle */}
+        <div className="flex items-center gap-[2px] p-[3px] rounded-md" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <button
+            onClick={() => setQuality("high")}
+            className="px-2 py-1 rounded text-[10px] font-medium transition-all duration-100 cursor-pointer"
+            style={{
+              background: quality === "high" ? "var(--bg-hover)" : "transparent",
+              color: quality === "high" ? "var(--green)" : "var(--text-muted)",
+            }}
+          >
+            Quality
+          </button>
+          <button
+            onClick={() => setQuality("all")}
+            className="px-2 py-1 rounded text-[10px] font-medium transition-all duration-100 cursor-pointer"
+            style={{
+              background: quality === "all" ? "var(--bg-hover)" : "transparent",
+              color: quality === "all" ? "var(--text-primary)" : "var(--text-muted)",
+            }}
+          >
+            All
+          </button>
+        </div>
+
         <input
           type="text"
           placeholder="Search..."
@@ -271,17 +293,21 @@ export default function FeedPage() {
             const isSaving = saving === item.sourceId;
             const src = SRC[item.source] || SRC.manual;
             const ai = aiScores[`${item.source}:${item.name}`] || (item.aiScore !== undefined ? { score: item.aiScore, verdict: item.aiVerdict || "", tags: item.aiTags || [] } : null);
+            const isLowAI = ai && ai.score < 20;
+            const isHighAI = ai && ai.score >= 70;
 
             return (
               <div
                 key={`${item.source}-${item.sourceId}-${i}`}
                 className="flex items-start gap-3 px-4 py-3 transition-colors duration-100"
                 style={{
-                  background: "var(--bg-surface)",
+                  background: isHighAI ? "rgba(34,197,94,0.02)" : "var(--bg-surface)",
                   borderBottom: i < sortedItems.length - 1 ? "1px solid var(--border)" : "none",
+                  opacity: isLowAI ? 0.45 : 1,
+                  borderLeft: isHighAI ? "2px solid var(--green)" : "2px solid transparent",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-raised)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-raised)"; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = isHighAI ? "rgba(34,197,94,0.02)" : "var(--bg-surface)"; e.currentTarget.style.opacity = isLowAI ? "0.45" : "1"; }}
               >
                 {/* Source indicator */}
                 <div className="shrink-0 pt-0.5">

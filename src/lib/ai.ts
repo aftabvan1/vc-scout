@@ -30,24 +30,36 @@ interface FeedItemInput {
 }
 
 export async function scoreStartup(item: FeedItemInput): Promise<AIScoreResult> {
-  const prompt = `You are a VC scout evaluating startups for investment potential. Score this startup from 0-100 based on:
-- Innovation/novelty (is this solving a real problem in a new way?)
-- Market size potential
-- Traction signals (engagement, community interest)
-- Team quality indicators
-- Technical differentiation
+  const prompt = `You are a ruthlessly selective seed-stage VC scout. Your job is to filter signal from noise.
 
-Startup:
+CRITICAL RULES:
+- Score 0 for anything that is NOT a startup/company building a product (open-source libraries, developer tools with no business model, tutorials, educational repos, blog posts, news articles, Reddit questions, personal projects with no commercial intent)
+- Score 1-20 for ideas/projects with no real traction or unclear value proposition
+- Score 21-50 for legitimate startups but weak signals (small market, unclear differentiation, no moat)
+- Score 51-70 for interesting startups with some promising signals
+- Score 71-85 for strong startups with clear product-market fit indicators
+- Score 86-100 ONLY for exceptional deals (clear traction, large market, strong team, technical moat)
+
+BE HARSH. Most items from aggregated feeds are noise. A typical batch should average 20-35. Anything above 60 should be genuinely exciting.
+
+Evaluate on:
+1. Product clarity (30%) — Is there a clear product solving a real problem? Or is this just a repo/post/article?
+2. Market opportunity (25%) — Is this a venture-scale market ($100M+)? Or a niche hobby?
+3. Traction signals (20%) — Platform engagement relative to source (HN: 50+ pts is good, GitHub: 200+ stars is notable, Reddit: 20+ upvotes shows interest)
+4. Team indicators (15%) — Any founder signals? Multiple makers? Known background?
+5. Technical moat (10%) — Defensible technology or easily replicated?
+
+Item to evaluate:
 - Name: ${item.name}
 - Source: ${item.source}
 - Description: ${item.description || "N/A"}
-- Engagement Score: ${item.score} (from source platform)
+- Platform Score: ${item.score}
 - URL: ${item.url}
 - Founders: ${item.founders || "Unknown"}
 - Sector: ${item.sector || "Unknown"}
 
 Respond ONLY with valid JSON (no markdown, no code blocks):
-{"score": <0-100>, "verdict": "<one sentence assessment>", "tags": ["<tag1>", "<tag2>", "<tag3>"]}`;
+{"score": <0-100>, "verdict": "<one sentence — be specific and opinionated>", "tags": ["<tag1>", "<tag2>", "<tag3>"]}`;
 
   try {
     const message = await client.messages.create({
@@ -78,7 +90,7 @@ export async function enrichStartup(startup: {
   source: string;
   score: number;
 }): Promise<AIEnrichResult> {
-  const prompt = `You are a VC scout doing deep research on a startup. Provide a comprehensive analysis.
+  const prompt = `You are a VC scout preparing a deal memo for your investment committee. Be specific, opinionated, and actionable. Don't hedge — take a clear position.
 
 Startup:
 - Name: ${startup.name}
@@ -89,15 +101,28 @@ Startup:
 - Source: ${startup.source}
 - Platform Score: ${startup.score}
 
+Answer these questions in your analysis:
+1. What exactly does this company do and who pays for it?
+2. How big is the addressable market realistically?
+3. Who are the top 3 competitors and what's the differentiation?
+4. What do we know (or can infer) about the founding team?
+5. What's the recommendation and why?
+
+For recommendation:
+- "pass" = Not venture-backable (too small, no moat, not a real company)
+- "watch" = Interesting but too early or unclear — check back in 3 months
+- "research" = Worth deeper diligence — schedule a call
+- "strong-interest" = Compelling deal — flag for immediate partner review
+
 Respond ONLY with valid JSON (no markdown, no code blocks):
 {
-  "score": <0-100 investment potential>,
-  "verdict": "<2-3 sentence investment thesis>",
+  "score": <0-100>,
+  "verdict": "<2-3 sentence investment thesis — be specific about WHY>",
   "tags": ["<tag1>", "<tag2>", "<tag3>"],
-  "sector": "<primary sector classification>",
+  "sector": "<specific sector, e.g. 'Developer Tools' not just 'Tech'>",
   "stage": "<pre-seed|seed|series-a|growth>",
-  "competitiveLandscape": "<brief competitive analysis, key competitors>",
-  "founderInsights": "<any insights about founders/team>",
+  "competitiveLandscape": "<name specific competitors and differentiation>",
+  "founderInsights": "<what can we infer about the team?>",
   "recommendation": "<pass|watch|research|strong-interest>"
 }`;
 
